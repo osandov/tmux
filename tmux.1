@@ -2556,6 +2556,10 @@ Set the amount of time for which status line messages and other on-screen
 indicators are displayed.
 .Ar time
 is in milliseconds.
+.It Ic double-click-time Ar time
+Set the maximum delay between mouse down events in a double- or triple-click to
+.Ar time
+milliseconds (the default is 300).
 .It Ic history-limit Ar lines
 Set the maximum number of lines held in window history.
 This setting applies only to new windows - existing window histories are not
@@ -3250,9 +3254,11 @@ for a pane border or
 for the status line).
 The following mouse events are available:
 .Bl -column "MouseDown1" "MouseDrag1" "WheelDown" -offset indent
-.It Li "MouseDown1" Ta "MouseUp1" Ta "MouseDrag1"
-.It Li "MouseDown2" Ta "MouseUp2" Ta "MouseDrag2"
-.It Li "MouseDown3" Ta "MouseUp3" Ta "MouseDrag3"
+.It Li "MouseDown1" Ta "MouseDown2" Ta "MouseDown3"
+.It Li "MouseUp1" Ta "MouseUp2" Ta "MouseUp3"
+.It Li "MouseDrag1" Ta "MouseDrag2" Ta "MouseDrag3"
+.It Li "DoubleClick1" Ta "DoubleClick2" Ta "DoubleClick3"
+.It Li "TripleClick1" Ta "TripleClick2" Ta "TripleClick3"
 .It Li "WheelUp" Ta "WheelDown" Ta ""
 .El
 .Pp

@@ -35,6 +35,7 @@ void	server_client_check_focus(struct window_pane *);
 void	server_client_check_resize(struct window_pane *);
 int	server_client_check_mouse(struct client *);
 void	server_client_repeat_timer(int, short, void *);
+void    server_client_click_timer(int, short, void *);
 void	server_client_check_exit(struct client *);
 void	server_client_check_redraw(struct client *);
 void	server_client_set_title(struct client *);
@@ -128,6 +129,7 @@ server_client_create(int fd)
 	c->keytable->references++;
 
 	evtimer_set(&c->repeat_timer, server_client_repeat_timer, c);
+	evtimer_set(&c->click_timer, server_client_click_timer, c);
 
 	TAILQ_INSERT_TAIL(&clients, c, entry);
 	log_debug("new client %d", fd);
@@ -193,6 +195,7 @@ server_client_lost(struct client *c)
 	close(c->cwd);
 
 	evtimer_del(&c->repeat_timer);
+	evtimer_del(&c->click_timer);
 
 	key_bindings_unref_table(c->keytable);
 
@@ -328,14 +331,15 @@ server_client_status_timer(void)
 int
 server_client_check_mouse(struct client *c)
 {
-	struct session				*s = c->session;
-	struct mouse_event			*m = &c->tty.mouse;
-	struct window				*w;
-	struct window_pane			*wp;
-	enum { NOTYPE, DOWN, UP, DRAG, WHEEL }	 type = NOTYPE;
-	enum { NOWHERE, PANE, STATUS, BORDER }	 where = NOWHERE;
-	u_int					 x, y, b;
-	int					 key;
+	struct session		*s = c->session;
+	struct mouse_event	*m = &c->tty.mouse;
+	struct window		*w;
+	struct window_pane	*wp;
+	struct timeval		 tv;
+	u_int		 	 x, y, b;
+	int		 	 key, xtimeout;
+	enum { NOTYPE, DOWN, UP, DRAG, WHEEL, DOUBLE, TRIPLE } type = NOTYPE;
+	enum { NOWHERE, PANE, STATUS, BORDER } where = NOWHERE;
 
 	log_debug("mouse %02x at %u,%u (last %u,%u) (%d)", m->b, m->x, m->y,
 	    m->lx, m->ly, c->tty.mouse_drag_flag);
@@ -362,6 +366,40 @@ server_client_check_mouse(struct client *c)
 		type = DOWN;
 		x = m->x, y = m->y, b = m->b;
 		log_debug("down at %u,%u", x, y);
+
+		c->click_event.x = x;
+		c->click_event.y = y;
+
+		xtimeout = options_get_number(&s->options, "double-click-time");
+		if (xtimeout != 0) {
+			tv.tv_sec = xtimeout / 1000;
+			tv.tv_usec = (xtimeout % 1000) * 1000L;
+			if (c->flags & CLIENT_SINGLECLICK) {
+				evtimer_del(&c->click_timer);
+				c->flags &= ~CLIENT_SINGLECLICK;
+				if (m->b == c->click_event.b) {
+					c->flags |= CLIENT_DOUBLECLICK;
+					evtimer_add(&c->click_timer, &tv);
+					log_debug("planting double-click");
+				} else {
+					log_debug("broken single");
+				}
+			} else if (c->flags & CLIENT_DOUBLECLICK) {
+				evtimer_del(&c->click_timer);
+				c->flags &= ~CLIENT_DOUBLECLICK;
+				if (m->b == c->click_event.b) {
+					log_debug("triggering triple-click");
+				} else {
+					log_debug("broken double");
+				}
+			} else {
+				c->click_event.b = b;
+				c->flags |= CLIENT_SINGLECLICK;
+				evtimer_add(&c->click_timer, &tv);
+				log_debug("planting single-click");
+			}
+		}
+
 	}
 	if (type == NOTYPE)
 		return (KEYC_NONE);
@@ -531,6 +569,62 @@ server_client_check_mouse(struct client *c)
 				key = KEYC_MOUSEDOWN3_STATUS;
 			if (where == BORDER)
 				key = KEYC_MOUSEDOWN3_BORDER;
+			break;
+		}
+		break;
+	case DOUBLE:
+		switch (MOUSE_BUTTONS(b)) {
+		case 0:
+			if (where == PANE)
+				key = KEYC_DOUBLECLICK1_PANE;
+			if (where == STATUS)
+				key = KEYC_DOUBLECLICK1_STATUS;
+			if (where == BORDER)
+				key = KEYC_DOUBLECLICK1_BORDER;
+			break;
+		case 1:
+			if (where == PANE)
+				key = KEYC_DOUBLECLICK2_PANE;
+			if (where == STATUS)
+				key = KEYC_DOUBLECLICK2_STATUS;
+			if (where == BORDER)
+				key = KEYC_DOUBLECLICK2_BORDER;
+			break;
+		case 2:
+			if (where == PANE)
+				key = KEYC_DOUBLECLICK3_PANE;
+			if (where == STATUS)
+				key = KEYC_DOUBLECLICK3_STATUS;
+			if (where == BORDER)
+				key = KEYC_DOUBLECLICK3_BORDER;
+			break;
+		}
+		break;
+	case TRIPLE:
+		switch (MOUSE_BUTTONS(b)) {
+		case 0:
+			if (where == PANE)
+				key = KEYC_TRIPLECLICK1_PANE;
+			if (where == STATUS)
+				key = KEYC_TRIPLECLICK1_STATUS;
+			if (where == BORDER)
+				key = KEYC_TRIPLECLICK1_BORDER;
+			break;
+		case 1:
+			if (where == PANE)
+				key = KEYC_TRIPLECLICK2_PANE;
+			if (where == STATUS)
+				key = KEYC_TRIPLECLICK2_STATUS;
+			if (where == BORDER)
+				key = KEYC_TRIPLECLICK2_BORDER;
+			break;
+		case 2:
+			if (where == PANE)
+				key = KEYC_TRIPLECLICK3_PANE;
+			if (where == STATUS)
+				key = KEYC_TRIPLECLICK3_STATUS;
+			if (where == BORDER)
+				key = KEYC_TRIPLECLICK3_BORDER;
 			break;
 		}
 		break;
@@ -908,6 +1002,19 @@ server_client_repeat_timer(unused int fd, unused short events, void *data)
 		c->flags &= ~CLIENT_REPEAT;
 		server_status_client(c);
 	}
+}
+
+/* Double-click callback. */
+void
+server_client_click_timer(unused int fd, unused short events, void *data)
+{
+	struct client	*c = data;
+
+	if (c->flags & CLIENT_SINGLECLICK)
+		log_debug("timed out single-click");
+	else if (c->flags & CLIENT_DOUBLECLICK)
+		log_debug("timed out double-click");
+	c->flags &= ~(CLIENT_SINGLECLICK | CLIENT_DOUBLECLICK);
 }
 
 /* Check if client should be exited. */

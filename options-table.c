@@ -186,6 +186,13 @@ const struct options_table_entry session_options_table[] = {
 	  .default_num = 750
 	},
 
+	{ .name = "double-click-time",
+	  .type = OPTIONS_TABLE_NUMBER,
+	  .minimum = 0,
+	  .maximum = SHRT_MAX,
+	  .default_num = 300
+	},
+
 	{ .name = "history-limit",
 	  .type = OPTIONS_TABLE_NUMBER,
 	  .minimum = 0,

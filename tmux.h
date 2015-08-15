@@ -106,7 +106,12 @@ extern char   **environ;
 
 /* Is this a mouse key? */
 #define KEYC_IS_MOUSE(key) (((key) & KEYC_MASK_KEY) >= KEYC_MOUSE &&	\
-    ((key) & KEYC_MASK_KEY) < KEYC_BSPACE)
+    ((key) & KEYC_MASK_KEY) < KEYC_CLICK)
+
+/* Is this a click key? */
+#define KEYC_IS_CLICK(key) \
+	(((key) & KEYC_MASK_KEY) >= KEYC_SINGLECLICK1_PANE &&	\
+	 ((key) & KEYC_MASK_KEY) <= KEYC_TRIPLECLICK3_BORDER)
 
 /* Mouse key codes. */
 #define KEYC_MOUSE_KEY(name)				\
@@ -137,6 +142,16 @@ enum key_code {
 	KEYC_MOUSE_KEY(MOUSEDRAG3),
 	KEYC_MOUSE_KEY(WHEELUP),
 	KEYC_MOUSE_KEY(WHEELDOWN),
+	KEYC_CLICK,
+	KEYC_MOUSE_KEY(SINGLECLICK1),
+	KEYC_MOUSE_KEY(SINGLECLICK2),
+	KEYC_MOUSE_KEY(SINGLECLICK3),
+	KEYC_MOUSE_KEY(DOUBLECLICK1),
+	KEYC_MOUSE_KEY(DOUBLECLICK2),
+	KEYC_MOUSE_KEY(DOUBLECLICK3),
+	KEYC_MOUSE_KEY(TRIPLECLICK1),
+	KEYC_MOUSE_KEY(TRIPLECLICK2),
+	KEYC_MOUSE_KEY(TRIPLECLICK3),
 
 	/* Backspace key. */
 	KEYC_BSPACE,
@@ -1063,6 +1078,17 @@ struct mouse_event {
 	u_int	sgr_b;
 };
 
+/* Click event. */
+struct click_event {
+	int valid;
+
+	int key;
+
+	u_int	x;
+	u_int	y;
+	u_int	b;
+};
+
 /* TTY information. */
 struct tty_key {
 	char		 ch;
@@ -1210,6 +1236,9 @@ struct client {
 
 	struct event	 repeat_timer;
 
+	struct event	 click_timer;
+	struct click_event click_event;
+
 	struct timeval	 status_timer;
 	struct screen	 status;
 
@@ -1232,6 +1261,8 @@ struct client {
 #define CLIENT_UTF8 0x10000
 #define CLIENT_256COLOURS 0x20000
 #define CLIENT_IDENTIFIED 0x40000
+#define CLIENT_SINGLECLICK 0x80000
+#define CLIENT_DOUBLECLICK 0x100000
 	int		 flags;
 	struct key_table *keytable;
 
